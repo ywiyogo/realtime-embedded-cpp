@@ -22,7 +22,6 @@ Hover:
 InlayHints:
   Enabled: Yes
   ParameterNames: Yes
-  TypeHints: Yes
   Designators: Yes
 Completion:
   AllScopes: Yes
