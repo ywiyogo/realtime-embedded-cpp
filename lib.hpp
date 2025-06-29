@@ -4,6 +4,7 @@
 #include <array>
 #include <type_traits>
 #include <cstdint>
+#include <cstddef>
 #include <algorithm>
 #include <cmath>
 
@@ -18,10 +19,12 @@ constexpr std::size_t MAX_SENSORS = 4;
 constexpr std::size_t SENSOR_BUFFER_SIZE = 50;
 constexpr double CRITICAL_ALTITUDE_THRESHOLD = 1000.0;
 constexpr std::uint32_t SENSOR_TIMEOUT_MS = 50;
+constexpr std::size_t MAX_TYPE_SIZE_BYTES = 8;  // Embedded constraint for sensor types
+constexpr std::size_t MIN_IDENTIFIER_LENGTH = 3;
 
 // C++23 constexpr function for compile-time validation
-constexpr bool is_valid_sensor_id(std::size_t id) noexcept {
-    return id < MAX_SENSORS;
+[[nodiscard]] constexpr auto is_valid_sensor_id(std::size_t sensor_id) noexcept -> bool {
+    return sensor_id < MAX_SENSORS;
 }
 
 // ============================================================================
@@ -32,11 +35,11 @@ constexpr bool is_valid_sensor_id(std::size_t id) noexcept {
 template<typename T>
 concept SensorDataType = std::is_arithmetic_v<T> &&
                         !std::is_same_v<T, bool> &&
-                        sizeof(T) <= 8; // Embedded constraint
+                        sizeof(T) <= MAX_TYPE_SIZE_BYTES;
 
 // Template for compile-time sensor range validation
 template<SensorDataType T>
-constexpr bool is_in_valid_range(T value, T min_val, T max_val) noexcept {
+[[nodiscard]] constexpr auto is_in_valid_range(T value, T min_val, T max_val) noexcept -> bool {
     return value >= min_val && value <= max_val;
 }
 
@@ -49,9 +52,9 @@ class StaticMemoryPool {
 public:
     static constexpr std::size_t pool_size = PoolSize;
 
-    constexpr StaticMemoryPool() noexcept : next_free_(0) {}
+    constexpr StaticMemoryPool() noexcept {}
 
-    [[nodiscard]] T* allocate() noexcept {
+    [[nodiscard]] auto allocate() noexcept -> T* {
         if (next_free_ >= PoolSize) {
             return nullptr; // Pool exhausted - handle gracefully
         }
@@ -65,13 +68,13 @@ public:
         }
     }
 
-    constexpr std::size_t available() const noexcept {
+    [[nodiscard]] constexpr auto available() const noexcept -> std::size_t {
         return PoolSize - next_free_;
     }
 
 private:
     std::array<T, PoolSize> pool_{};
-    std::size_t next_free_;
+    std::size_t next_free_{0};
 };
 
 // ============================================================================
@@ -87,8 +90,8 @@ struct SensorData {
     constexpr SensorData() noexcept
         : value(0.0), timestamp_us(0), sensor_id(0), is_valid(false) {}
 
-    constexpr SensorData(double val, std::uint64_t ts, std::uint8_t id) noexcept
-        : value(val), timestamp_us(ts), sensor_id(id), is_valid(true) {}
+    constexpr SensorData(double sensor_value, std::uint64_t timestamp_microseconds, std::uint8_t sensor_identifier) noexcept
+        : value(sensor_value), timestamp_us(timestamp_microseconds), sensor_id(sensor_identifier), is_valid(true) {}
 };
 
 // ============================================================================
@@ -98,17 +101,17 @@ struct SensorData {
 class ISensor {
 public:
     virtual ~ISensor() = default;
-    virtual SensorData read() noexcept = 0;
-    virtual bool is_healthy() const noexcept = 0;
-    virtual std::uint8_t get_id() const noexcept = 0;
-    virtual const char* get_name() const noexcept = 0;
+    virtual auto read() noexcept -> SensorData = 0;
+    [[nodiscard]] virtual auto is_healthy() const noexcept -> bool = 0;
+    [[nodiscard]] virtual auto get_id() const noexcept -> std::uint8_t = 0;
+    [[nodiscard]] virtual auto get_name() const noexcept -> const char* = 0;
 };
 
 class IDataProcessor {
 public:
     virtual ~IDataProcessor() = default;
     virtual void process(const SensorData& data) noexcept = 0;
-    virtual bool is_critical_condition() const noexcept = 0;
+    [[nodiscard]] virtual auto is_critical_condition() const noexcept -> bool = 0;
 };
 
 class ILogger {
@@ -127,11 +130,10 @@ public:
 template<SensorDataType T>
 class GenericSensor : public ISensor {
 public:
-    constexpr GenericSensor(std::uint8_t id, const char* name, T min_range, T max_range) noexcept
-        : id_(id), name_(name), min_range_(min_range), max_range_(max_range),
-          healthy_(true), last_reading_(0) {}
+    constexpr GenericSensor(std::uint8_t sensor_id, const char* sensor_name, T minimum_range, T maximum_range) noexcept
+        : id_(sensor_id), name_(sensor_name), min_range_(minimum_range), max_range_(maximum_range) {}
 
-    SensorData read() noexcept override {
+    auto read() noexcept -> SensorData override {
         // Simulate sensor reading - in real system, would read from hardware
         T raw_value = simulate_sensor_reading();
 
@@ -146,17 +148,17 @@ public:
         return SensorData{last_reading_, get_current_time_us(), id_};
     }
 
-    bool is_healthy() const noexcept override { return healthy_; }
-    std::uint8_t get_id() const noexcept override { return id_; }
-    const char* get_name() const noexcept override { return name_; }
+    [[nodiscard]] auto is_healthy() const noexcept -> bool override { return healthy_; }
+    [[nodiscard]] auto get_id() const noexcept -> std::uint8_t override { return id_; }
+    [[nodiscard]] auto get_name() const noexcept -> const char* override { return name_; }
 
 private:
     std::uint8_t id_;
     const char* name_;
     T min_range_;
     T max_range_;
-    bool healthy_;
-    double last_reading_;
+    bool healthy_{true};
+    double last_reading_{0};
 
     // Simulate sensor reading (in real system, would interface with hardware)
     T simulate_sensor_reading() noexcept {
@@ -190,8 +192,7 @@ using PressureSensor = GenericSensor<std::uint32_t>;
 
 class FlightDataProcessor : public IDataProcessor {
 public:
-    constexpr FlightDataProcessor() noexcept
-        : buffer_index_(0), critical_condition_(false) {}
+    constexpr FlightDataProcessor() noexcept {}
 
     void process(const SensorData& data) noexcept override {
         // Store data in circular buffer (no dynamic allocation)
@@ -202,7 +203,7 @@ public:
         process_by_sensor_type(data);
     }
 
-    bool is_critical_condition() const noexcept override {
+    [[nodiscard]] auto is_critical_condition() const noexcept -> bool override {
         return critical_condition_;
     }
 
@@ -218,8 +219,8 @@ public:
 
 private:
     std::array<SensorData, SENSOR_BUFFER_SIZE> buffer_{};
-    std::size_t buffer_index_;
-    bool critical_condition_;
+    std::size_t buffer_index_{0};
+    bool critical_condition_{false};
 
     void process_by_sensor_type(const SensorData& data) noexcept {
         switch (data.sensor_id) {
@@ -234,7 +235,7 @@ private:
                 }
                 break;
             case 2: // Pressure sensor
-                if (data.value < 50000) { // 50kPa minimum pressure
+                if (data.value < 50000.0) { // 50kPa minimum pressure
                     critical_condition_ = true;
                 }
                 break;
@@ -263,7 +264,7 @@ public:
     }
 
 private:
-    void log_with_level(const char* level, const char* message) noexcept;
+    static void log_with_level(const char* level, const char* message) noexcept;
 };
 
 // ============================================================================
@@ -275,7 +276,7 @@ public:
     // Constructor with dependency injection
     FlightControlSystem(std::unique_ptr<IDataProcessor> processor,
                        std::unique_ptr<ILogger> logger) noexcept
-        : sensor_count_(0), processor_(std::move(processor)), logger_(std::move(logger)) {}
+        : processor_(std::move(processor)), logger_(std::move(logger)) {}
 
     // Add sensor with perfect forwarding
     template<typename SensorType>
@@ -329,7 +330,7 @@ public:
 
 private:
     std::array<std::unique_ptr<ISensor>, MAX_SENSORS> sensors_{};
-    std::size_t sensor_count_;
+    std::size_t sensor_count_{0};
     std::unique_ptr<IDataProcessor> processor_;
     std::unique_ptr<ILogger> logger_;
 

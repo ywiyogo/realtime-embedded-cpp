@@ -1,5 +1,8 @@
 #include "lib.hpp"
 #include <cstdio>
+#include <cstddef>
+#include <cstdint>
+#include <array>
 
 namespace aerospace {
 
@@ -21,9 +24,13 @@ template class GenericSensor<std::uint32_t>;
 // ============================================================================
 
 void EmbeddedLogger::log_with_level(const char* level, const char* message) noexcept {
+    // Named constants for better maintainability
+    constexpr std::uint64_t TIME_INCREMENT_MS = 10;
+    constexpr std::size_t LOG_BUFFER_SIZE = 256;
+    
     // Get timestamp (in real system, would use hardware timer)
     static std::uint64_t system_time_ms = 0;
-    system_time_ms += 10; // Simulate 10ms increments
+    system_time_ms += TIME_INCREMENT_MS;
 
     // Format: [TIMESTAMP] LEVEL: MESSAGE
     // In real embedded system, this would go to:
@@ -31,38 +38,39 @@ void EmbeddedLogger::log_with_level(const char* level, const char* message) noex
     // - Flash memory for persistent logging
     // - Shared memory for other systems
 
-    constexpr std::size_t log_buffer_size = 256;
-    char log_buffer[log_buffer_size];
+    std::array<char, LOG_BUFFER_SIZE> log_buffer{};
 
     // Safe string formatting (avoiding printf for embedded safety)
     std::size_t pos = 0;
 
     // Add timestamp
-    log_buffer[pos++] = '[';
-    pos += static_cast<std::size_t>(std::snprintf(&log_buffer[pos], log_buffer_size - pos - 1, "%llu",
+    log_buffer.at(pos++) = '[';
+    pos += static_cast<std::size_t>(std::snprintf(&log_buffer.at(pos), LOG_BUFFER_SIZE - pos - 1, "%llu",
                    static_cast<unsigned long long>(system_time_ms)));
-    log_buffer[pos++] = ']';
-    log_buffer[pos++] = ' ';
+    log_buffer.at(pos++) = ']';
+    log_buffer.at(pos++) = ' ';
 
     // Add level
-    if (level) {
+    if (level != nullptr) {
         const char* level_ptr = level;
-        while (*level_ptr && pos < log_buffer_size - 1) {
-            log_buffer[pos++] = *level_ptr++;
+        while ((*level_ptr != '\0') && pos < LOG_BUFFER_SIZE - 1) {
+            log_buffer.at(pos++) = *level_ptr;
+            ++level_ptr;
         }
     }
-    log_buffer[pos++] = ':';
-    log_buffer[pos++] = ' ';
+    log_buffer.at(pos++) = ':';
+    log_buffer.at(pos++) = ' ';
 
     // Add message
-    if (message) {
+    if (message != nullptr) {
         const char* msg_ptr = message;
-        while (*msg_ptr && pos < log_buffer_size - 1) {
-            log_buffer[pos++] = *msg_ptr++;
+        while ((*msg_ptr != '\0') && pos < LOG_BUFFER_SIZE - 1) {
+            log_buffer.at(pos++) = *msg_ptr;
+            ++msg_ptr;
         }
     }
 
-    log_buffer[pos] = '\0';
+    log_buffer.at(pos) = '\0';
 
     // In real system: write to hardware interfaces
     // simulate_uart_write(log_buffer, pos);
