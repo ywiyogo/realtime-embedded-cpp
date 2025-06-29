@@ -1,0 +1,14 @@
+[
+{
+  "directory": "/run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial/build",
+  "command": "/usr/bin/c++ -DAEROSPACE_REALTIME_SYSTEM=1 -DDETERMINISTIC_EXECUTION=1 -DMAX_STACK_USAGE=8192 -I/run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial  -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wconversion -Wsign-conversion -Wnon-virtual-dtor -Woverloaded-virtual -Wstack-usage=8192 -Wformat=2 -Wformat-security -Wcast-align -Wcast-qual -Wshadow -O3 -DNDEBUG -march=native -std=c++23 -o CMakeFiles/aerospace_lib.dir/lib.cpp.o -c /run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial/lib.cpp",
+  "file": "/run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial/lib.cpp",
+  "output": "CMakeFiles/aerospace_lib.dir/lib.cpp.o"
+},
+{
+  "directory": "/run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial/build",
+  "command": "/usr/bin/c++ -DAEROSPACE_REALTIME_SYSTEM=1 -DDETERMINISTIC_EXECUTION=1 -DMAX_STACK_USAGE=8192 -I/run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial  -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wconversion -Wsign-conversion -Wnon-virtual-dtor -Woverloaded-virtual -Wstack-usage=8192 -Wformat=2 -Wformat-security -Wcast-align -Wcast-qual -Wshadow -O3 -DNDEBUG -march=native -std=c++23 -o CMakeFiles/aerospace_system.dir/main.cpp.o -c /run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial/main.cpp",
+  "file": "/run/media/y2/nvme4/ydata/yccpp/realtime/aerospace_tutorial/main.cpp",
+  "output": "CMakeFiles/aerospace_system.dir/main.cpp.o"
+}
+]
