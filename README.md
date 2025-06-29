@@ -234,7 +234,7 @@ make info                    # Show build information
 ```
 
 ### What Gets Tested
-- ✅ Memory pool allocation/deallocation  
+- ✅ Memory pool allocation/deallocation
 - ✅ Sensor creation and health checks
 - ✅ Constexpr compile-time validation
 - ✅ Real-time execution constraints
@@ -296,13 +296,5 @@ make analyze  # If clang-tidy is available
 - Coroutines (C++20)
 - Modules (C++20)
 - Ranges library (C++20)
-
-## 🤝 Contributing & Questions
-
-This is an educational project! Feel free to:
-- 🐛 **Report Issues**: Found a bug or unclear explanation?
-- 💡 **Suggest Improvements**: Ideas for better learning materials?
-- 🔧 **Add Examples**: More real-world scenarios?
-- 📚 **Improve Documentation**: Help other learners!
-
-This educational project is provided as-is for learning purposes. Use the concepts and code patterns in your own projects!
+- Asynchronous programming (C++20)
+- Parallelism and Concurrency (C++20)
