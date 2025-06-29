@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace aerospace {
 
@@ -21,6 +22,9 @@ constexpr double CRITICAL_ALTITUDE_THRESHOLD = 1000.0;
 constexpr std::uint32_t SENSOR_TIMEOUT_MS = 50;
 constexpr std::size_t MAX_TYPE_SIZE_BYTES = 8;  // Embedded constraint for sensor types
 constexpr std::size_t MIN_IDENTIFIER_LENGTH = 3;
+constexpr std::uint64_t TIME_SIMULATION_INCREMENT_US = 1000;  // 1ms increments
+constexpr double MAX_TEMPERATURE_CELSIUS = 85.0;
+constexpr double MIN_PRESSURE_PA = 50000.0;
 
 // C++23 constexpr function for compile-time validation
 [[nodiscard]] constexpr auto is_valid_sensor_id(std::size_t sensor_id) noexcept -> bool {
@@ -52,7 +56,7 @@ class StaticMemoryPool {
 public:
     static constexpr std::size_t pool_size = PoolSize;
 
-    constexpr StaticMemoryPool() noexcept {}
+    constexpr StaticMemoryPool() noexcept = default;
 
     [[nodiscard]] auto allocate() noexcept -> T* {
         if (next_free_ >= PoolSize) {
@@ -82,16 +86,23 @@ private:
 // ============================================================================
 
 struct SensorData {
-    double value;
-    std::uint64_t timestamp_us;
-    std::uint8_t sensor_id;
-    bool is_valid;
+private:
+    double value_;
+    std::uint64_t timestamp_us_;
+    std::uint8_t sensor_id_;
+    bool is_valid_;
 
+public:
     constexpr SensorData() noexcept
-        : value(0.0), timestamp_us(0), sensor_id(0), is_valid(false) {}
+        : value_(0.0), timestamp_us_(0), sensor_id_(0), is_valid_(false) {}
 
     constexpr SensorData(double sensor_value, std::uint64_t timestamp_microseconds, std::uint8_t sensor_identifier) noexcept
-        : value(sensor_value), timestamp_us(timestamp_microseconds), sensor_id(sensor_identifier), is_valid(true) {}
+        : value_(sensor_value), timestamp_us_(timestamp_microseconds), sensor_id_(sensor_identifier), is_valid_(true) {}
+
+    [[nodiscard]] constexpr auto value() const noexcept -> double { return value_; }
+    [[nodiscard]] constexpr auto timestamp_us() const noexcept -> std::uint64_t { return timestamp_us_; }
+    [[nodiscard]] constexpr auto sensor_id() const noexcept -> std::uint8_t { return sensor_id_; }
+    [[nodiscard]] constexpr auto is_valid() const noexcept -> bool { return is_valid_; }
 };
 
 // ============================================================================
@@ -101,25 +112,49 @@ struct SensorData {
 class ISensor {
 public:
     virtual ~ISensor() = default;
+    ISensor(const ISensor&) = delete;
+    ISensor& operator=(const ISensor&) = delete;
+    ISensor(ISensor&&) = default;
+    ISensor& operator=(ISensor&&) = default;
+
     virtual auto read() noexcept -> SensorData = 0;
     [[nodiscard]] virtual auto is_healthy() const noexcept -> bool = 0;
     [[nodiscard]] virtual auto get_id() const noexcept -> std::uint8_t = 0;
     [[nodiscard]] virtual auto get_name() const noexcept -> const char* = 0;
+
+protected:
+    ISensor() = default;
 };
 
 class IDataProcessor {
 public:
     virtual ~IDataProcessor() = default;
+    IDataProcessor(const IDataProcessor&) = delete;
+    IDataProcessor& operator=(const IDataProcessor&) = delete;
+    IDataProcessor(IDataProcessor&&) = default;
+    IDataProcessor& operator=(IDataProcessor&&) = default;
+
     virtual void process(const SensorData& data) noexcept = 0;
     [[nodiscard]] virtual auto is_critical_condition() const noexcept -> bool = 0;
+
+protected:
+    IDataProcessor() = default;
 };
 
 class ILogger {
 public:
     virtual ~ILogger() = default;
+    ILogger(const ILogger&) = delete;
+    ILogger& operator=(const ILogger&) = delete;
+    ILogger(ILogger&&) = default;
+    ILogger& operator=(ILogger&&) = default;
+
     virtual void log_info(const char* message) noexcept = 0;
     virtual void log_warning(const char* message) noexcept = 0;
     virtual void log_error(const char* message) noexcept = 0;
+
+protected:
+    ILogger() = default;
 };
 
 // ============================================================================
@@ -161,7 +196,7 @@ private:
     double last_reading_{0};
 
     // Simulate sensor reading (in real system, would interface with hardware)
-    T simulate_sensor_reading() noexcept {
+    auto simulate_sensor_reading() noexcept -> T {
         // Simple simulation - in real system would read from ADC, I2C, etc.
         static T counter = static_cast<T>(0);
         T range_diff = max_range_ - min_range_;
@@ -174,10 +209,10 @@ private:
         }
     }
 
-    std::uint64_t get_current_time_us() const noexcept {
+    [[nodiscard]] auto get_current_time_us() const noexcept -> std::uint64_t {
         // In real system, would use hardware timer
         static std::uint64_t sim_time = 0;
-        return sim_time += 1000; // Simulate 1ms increments
+        return sim_time += TIME_SIMULATION_INCREMENT_US;
     }
 };
 
@@ -192,10 +227,11 @@ using PressureSensor = GenericSensor<std::uint32_t>;
 
 class FlightDataProcessor : public IDataProcessor {
 public:
-    constexpr FlightDataProcessor() noexcept {}
+    constexpr FlightDataProcessor() noexcept = default;
 
     void process(const SensorData& data) noexcept override {
         // Store data in circular buffer (no dynamic allocation)
+        // Real-time safe: buffer_index_ is always < SENSOR_BUFFER_SIZE due to modulo
         buffer_[buffer_index_] = data;
         buffer_index_ = (buffer_index_ + 1) % SENSOR_BUFFER_SIZE;
 
@@ -209,10 +245,11 @@ public:
 
     // C++23 lambda with template for flexible processing
     template<typename ProcessorFunc>
-    void apply_to_recent_data(ProcessorFunc&& processor) const noexcept {
+    void apply_to_recent_data(ProcessorFunc&& processor_func) const noexcept {
         for (std::size_t i = 0; i < SENSOR_BUFFER_SIZE; ++i) {
-            if (buffer_[i].is_valid) {
-                processor(buffer_[i]);
+            // Real-time safe: i is always < SENSOR_BUFFER_SIZE due to loop bounds
+            if (buffer_[i].is_valid()) {
+                std::forward<ProcessorFunc>(processor_func)(buffer_[i]);
             }
         }
     }
@@ -223,19 +260,19 @@ private:
     bool critical_condition_{false};
 
     void process_by_sensor_type(const SensorData& data) noexcept {
-        switch (data.sensor_id) {
+        switch (data.sensor_id()) {
             case 0: // Altitude sensor
-                if (data.value < CRITICAL_ALTITUDE_THRESHOLD) {
+                if (data.value() < CRITICAL_ALTITUDE_THRESHOLD) {
                     critical_condition_ = true;
                 }
                 break;
             case 1: // Temperature sensor
-                if (data.value > 85.0) { // 85°C max temperature
+                if (data.value() > MAX_TEMPERATURE_CELSIUS) {
                     critical_condition_ = true;
                 }
                 break;
             case 2: // Pressure sensor
-                if (data.value < 50000.0) { // 50kPa minimum pressure
+                if (data.value() < MIN_PRESSURE_PA) {
                     critical_condition_ = true;
                 }
                 break;
@@ -280,7 +317,7 @@ public:
 
     // Add sensor with perfect forwarding
     template<typename SensorType>
-    bool add_sensor(std::unique_ptr<SensorType> sensor) noexcept {
+    auto add_sensor(std::unique_ptr<SensorType> sensor) noexcept -> bool {
         static_assert(std::is_base_of_v<ISensor, SensorType>,
                      "SensorType must inherit from ISensor");
 
@@ -288,6 +325,7 @@ public:
             return false;
         }
 
+        // Real-time safe: sensor_count_ is always < MAX_SENSORS due to check above
         sensors_[sensor_count_++] = std::move(sensor);
         return true;
     }
@@ -301,7 +339,7 @@ public:
             }
 
             auto data = sensor->read();
-            if (data.is_valid) {
+            if (data.is_valid()) {
                 processor_->process(data);
 
                 // Check for critical conditions
@@ -314,16 +352,18 @@ public:
 
         // Process all sensors
         for (std::size_t i = 0; i < sensor_count_; ++i) {
+            // Real-time safe: i is always < sensor_count_ <= MAX_SENSORS due to loop bounds
             process_sensor(sensors_[i]);
         }
     }
 
     // Template method for batch sensor operations
     template<typename Operation>
-    void for_each_sensor(Operation&& op) noexcept {
+    void for_each_sensor(Operation&& operation) noexcept {
         for (std::size_t i = 0; i < sensor_count_; ++i) {
+            // Real-time safe: i is always < sensor_count_ <= MAX_SENSORS due to loop bounds
             if (sensors_[i]) {
-                op(*sensors_[i]);
+                std::forward<Operation>(operation)(*sensors_[i]);
             }
         }
     }
@@ -346,12 +386,12 @@ private:
 
 // Factory function using perfect forwarding
 template<typename T, typename... Args>
-std::unique_ptr<T> make_sensor(Args&&... args) noexcept {
+auto make_sensor(Args&&... args) noexcept -> std::unique_ptr<T> {
     return std::make_unique<T>(std::forward<Args>(args)...);
 }
 
 // System factory function
-inline std::unique_ptr<FlightControlSystem> create_flight_system() noexcept {
+inline auto create_flight_system() noexcept -> std::unique_ptr<FlightControlSystem> {
     auto processor = std::make_unique<FlightDataProcessor>();
     auto logger = std::make_unique<EmbeddedLogger>();
 
@@ -361,7 +401,7 @@ inline std::unique_ptr<FlightControlSystem> create_flight_system() noexcept {
 
 // Template function for sensor data validation with concepts
 template<SensorDataType T>
-constexpr bool validate_sensor_range(T value, T nominal, T tolerance) noexcept {
+constexpr auto validate_sensor_range(T value, T nominal, T tolerance) noexcept -> bool {
     static_assert(std::is_arithmetic_v<T>, "Sensor data must be arithmetic type");
 
     if constexpr (std::is_floating_point_v<T>) {

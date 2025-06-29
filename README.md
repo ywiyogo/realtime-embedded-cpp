@@ -177,6 +177,31 @@ if (!healthy) {
 }
 ```
 
+### 7. **Interface Class Safety Pattern**
+```cpp
+class ISensor {
+public:
+    virtual ~ISensor() = default;
+    ISensor(const ISensor&) = delete;           // Prevent copying
+    ISensor& operator=(const ISensor&) = delete;
+    ISensor(ISensor&&) = default;               // Allow moving
+    ISensor& operator=(ISensor&&) = default;
+protected:
+    ISensor() = default;                        // Protected constructor
+};
+```
+*Prevents accidental copying of interface objects while allowing safe polymorphic usage and move semantics.*
+
+### 8. **Real-Time Safe Array Access**
+```cpp
+// ❌ Runtime bounds checking - can throw exceptions
+buffer_.at(index) = data;
+
+// ✅ Real-time safe - bounds proven by design constraints
+buffer_[buffer_index_] = data;  // buffer_index_ always < SENSOR_BUFFER_SIZE due to modulo
+```
+*Uses design-proven bounds safety instead of runtime checks to maintain deterministic execution times.*
+
 ## 🛡️ Real-Time & Safety Features
 
 ### Memory Safety
@@ -185,6 +210,8 @@ if (!healthy) {
 - ✅ **Bounded Arrays**: `std::array` instead of raw arrays
 - ✅ **RAII**: Deterministic resource cleanup
 - ✅ **[[nodiscard]] Attributes**: Prevents ignoring critical return values
+- ✅ **Interface Class Safety**: Protected constructors and controlled copy/move semantics
+- ✅ **Real-Time Safe Array Access**: Bounds-proven `[]` access instead of exception-throwing `.at()`
 
 ### Type Safety
 - ✅ **Concepts**: Compile-time type validation
@@ -256,13 +283,16 @@ This project has been enhanced with modern C++ safety practices based on static 
 
 #### **Memory Safety Enhancements**
 - **std::array**: Replaced C-style arrays with bounds-checked containers
-- **Safe indexing**: Using `.at()` for bounds-checked access
+- **Real-time safe indexing**: Using `[]` with design-proven bounds safety instead of `.at()`
 - **Default member initialization**: Initialize class members at declaration
+- **Interface encapsulation**: Private data members with `constexpr` accessor methods
 
 #### **Modern C++ Patterns**
 - **Trailing return types**: `auto function() -> ReturnType` for consistency
 - **Comprehensive headers**: Include all necessary standard library headers
 - **Parameter naming**: Descriptive names instead of abbreviations (`sensor_id` vs `id`)
+- **Interface safety**: Protected constructors and explicit copy/move control
+- **RAII compliance**: All resources managed through object lifetimes
 
 #### **Static Analysis Commands**
 ```bash
@@ -281,6 +311,79 @@ make analyze  # If clang-tidy is available
 - **Safety Focus**: All safety-critical functions use [[nodiscard]]
 - **Maintainability**: Consistent naming and modern C++ patterns
 - **Performance**: Compile-time optimizations with constexpr
+- **Interface Safety**: All polymorphic interfaces prevent accidental copying
+- **Real-Time Compliance**: No runtime bounds checking or exception-throwing operations
+
+## ⚡ Real-Time Design Decisions & Trade-offs
+
+### Array Access Strategy
+
+**Decision**: Use `[]` with design-proven bounds instead of `.at()` with runtime checks
+
+```cpp
+// ❌ Runtime bounds checking - violates real-time constraints
+buffer_.at(index) = data;  // Can throw std::out_of_range
+
+// ✅ Design-proven bounds safety - real-time compliant
+buffer_[buffer_index_] = data;  // buffer_index_ always < SENSOR_BUFFER_SIZE due to modulo
+```
+
+**Trade-off Analysis:**
+- **Performance**: Zero runtime overhead vs. additional bounds checking
+- **Safety**: Design-time proof vs. runtime validation
+- **Determinism**: Fixed execution time vs. potential exception handling
+- **Real-time compliance**: Guaranteed vs. compromised
+
+### Interface Class Design
+
+**Decision**: Protected constructors with controlled copy/move semantics
+
+```cpp
+class ISensor {
+    ISensor(const ISensor&) = delete;     // Prevent slicing
+    ISensor(ISensor&&) = default;         // Allow efficient transfers
+protected:
+    ISensor() = default;                  // Prevent direct instantiation
+};
+```
+
+**Benefits:**
+- **Prevents object slicing**: Can't accidentally copy polymorphic objects
+- **Enables move optimization**: Efficient transfers in containers
+- **Maintains polymorphism**: Only derived classes can be instantiated
+- **Zero runtime cost**: All compile-time enforcement
+
+### Data Encapsulation Strategy
+
+**Decision**: Private members with `constexpr` getters instead of public fields
+
+```cpp
+// Before: Direct access (fast but unsafe)
+struct SensorData {
+    double value;  // Public - can be modified accidentally
+};
+
+// After: Controlled access (same performance, safer)
+class SensorData {
+    double value_;  // Private - controlled access
+public:
+    [[nodiscard]] constexpr auto value() const noexcept -> double { return value_; }
+};
+```
+
+**Real-time Impact**: Zero - `constexpr` getters are inlined and optimized away completely.
+
+### Memory Management Philosophy
+
+**Constraint**: No dynamic allocation (`new`/`delete`) anywhere in the system
+
+**Implementation:**
+- **Static arrays**: `std::array<T, SIZE>` with compile-time sizes
+- **Memory pools**: Pre-allocated fixed-size pools
+- **Smart pointers**: Only for ownership transfer, not allocation
+- **RAII**: Automatic cleanup without garbage collection overhead
+
+**Real-time Guarantee**: All memory operations have deterministic, bounded execution times.
 
 ## 📖 Further Reading
 
